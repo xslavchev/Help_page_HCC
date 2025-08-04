@@ -1,0 +1,151 @@
+# Source function files at the top
+source "available_commands.func"
+
+
+print_usage(){
+    local usage_text error_message
+    error_message="$1"
+
+    # Color definitions for better readability
+    local RED='\033[0;31m'
+    local GREEN='\033[0;32m'
+    local YELLOW='\033[1;33m'
+    local BLUE='\033[0;34m'
+    local CYAN='\033[0;36m'
+    local BOLD='\033[1m'
+    local NC='\033[0m' # No Color
+
+usage_text=$(cat << DESC
+
+${BOLD}${CYAN}hcc ver. $version${NC}
+
+${BOLD}================================================================================
+🚀 HCC - HANA Cloud Connect Script
+================================================================================${NC}
+${BOLD}${GREEN}🏷️ STANDARD COMMAND PATTERN:${NC}
+    ${CYAN}hcc <command> <landscape> <SID> ${NC}
+
+${BOLD}${GREEN}📋 EXAMPLES:${NC}
+    ${CYAN}hcc hc_check eu10 HDB${NC}                    # Health check for HDB instance
+    ${CYAN}hcc bash eu10 HDB -i "df -h"${NC}             # Check disk usage remotely
+    ${CYAN}hcc search HDB${NC}                           # Find HDB instance across landscapes  
+    ${CYAN}hcc clone_hana -s "HDB01" -d "HDB02" -t "2024-01-15 14:30:00" -u "uuid-123"${NC}
+
+${BOLD}${GREEN}🔄 UPDATE COMMANDS:${NC}
+    ${CYAN}hcc update${NC}                   - Updates to latest stable version
+    ${CYAN}hcc update-beta${NC}              - Updates to latest BETA version  
+    ${CYAN}hcc update-from <branch>${NC}     - Updates from specific branch (For Development and testing)
+
+${BOLD}${GREEN}🏥 HEALTH CHECKS & MONITORING:${NC}
+    ${CYAN}hc_check${NC}                     - Full health check of HANA Cloud instance
+    ${CYAN}lhc_check${NC}                    - Legacy full check (separate K8s API calls)
+    ${CYAN}hdl_check${NC}                    - HANA DATALAKE instance full check
+    ${CYAN}not_ready${NC}                    - HANA not-ready checks
+    ${CYAN}long${NC}                         - HANA Long Running Operation checks
+    ${CYAN}disk_check${NC}                   - Disk usage check for HANA Cloud instance
+    ${CYAN}backup_check${NC}                 - Check instance for backup issues
+    ${CYAN}docstore_check${NC}               - Check, enable, or disable docstore
+    ${CYAN}landscape_check <landscape>${NC}  - Check alerts from last 10 minutes (mass outages)
+    
+    ${CYAN}ern_check${NC}                    - Check ERN state and collect logs and opens HC01
+        ${BOLD}Usage:${NC} hcc ern_check <SID> --ern-id <ERN-ID>  ${YELLOW}# Specific ERN${NC}
+        ${BOLD}Usage:${NC} hcc ern_check <SID> --all              ${YELLOW}# All ERNs${NC}
+
+${BOLD}${GREEN}🗄️ DATABASE OPERATIONS:${NC}
+    ${CYAN}sys_hdbsql${NC}                      - Connect to SYSTEMDB with SYSTEM user
+    ${CYAN}h00_hdbsql${NC}                      - Connect to H00 with SYSTEM user
+
+${BOLD}${GREEN}💻 SYSTEM OPERATIONS & 🔧 UTILITIES:${NC}
+    ${CYAN}bash${NC}                         - OS level access or remote command execution
+        ${BOLD}Usage:${NC} hcc bash <landscape> <instance>              ${YELLOW}# Interactive shell${NC}
+        ${BOLD}Usage:${NC} hcc bash <landscape> <instance> -i "<cmd>"   ${YELLOW}# Execute command${NC}
+        ${BOLD}Example:${NC} hcc bash eu10 HDB -i "cat /etc/hostname"
+    
+    ${CYAN}gstack_collection${NC}            - Collect gstack for given instance
+    ${CYAN}vlc${NC}                          - vSMP MemoryONE/Virtualization Log Collection
+        ${BOLD}Usage:${NC} hcc vlc <context> <node_name> <ticket_number>
+        ${BOLD}Example:${NC} hcc vlc shoot--hc-canary--prod-haas ip-10-42-74-176.eu-central-1.compute.internal HC01-123456
+
+    ${CYAN}search${NC}                       - Search for instance across all landscapes
+    ${CYAN}fsid${NC}                         - Collect FSID for given instance
+    ${CYAN}rte${NC}                          - Create and collect RTE dumps for specific instance
+    ${CYAN}fsid_hctail${NC}                  - Collect all or last 2 traces from hctail pod
+
+${BOLD}${GREEN}💾 BACKUP & RECOVERY:${NC}
+    ${CYAN}clone_hana${NC}                 - Clone source instance to destination
+        ${BOLD}Usage:${NC} hcc clone_hana -s "<source instance>" -d "<destination instance>" -t "YYYY-MM-DD HH:MM:SS" -u "<verification uuid>" -e "<optional_parameter_ebid_provided_by_backup_team>"
+        
+        ${BOLD}3-step process alternative:${NC}
+        1. ${CYAN}hcc${NC} clone_hana_recovery -s "<source instance>" -d "<destination instance>" -t "YYYY-MM-DD HH:MM:SS" -u "<verification uuid>" -e "<optional_parameter_ebid_provided_by_backup_team>" - ${YELLOW}Recovery step${NC}
+        2. ${CYAN}hcc${NC} clone_hana_backup -s "<source instance>" -d "<destination instance>" -t "YYYY-MM-DD HH:MM:SS" -u "<verification uuid>" -e "<optional_parameter_ebid_provided_by_backup_team>" - ${YELLOW}Backup step${NC}  
+        3. ${CYAN}hcc${NC} clone_hana_postprocessing -s "<source instance>" -d "<destination instance>" -t "YYYY-MM-DD HH:MM:SS" -u "<verification uuid>" -e "<optional_parameter_ebid_provided_by_backup_team>"${NC} - ${YELLOW}Post-processing step${NC}
+
+    ${CYAN}recover_hana${NC}               - Recover deleted instance to destination
+        ${BOLD}Usage:${NC} hcc recover_hana -s "<source>" -d "<destination>" -t "YYYY-MM-DD HH:MM:SS" -e "<ebid>"
+        ${BOLD}Post-processing only:${NC} hcc recover_hana_postprocessing [params]
+
+${BOLD}${GREEN}🎫 SERVICENOW INTEGRATION:${NC}
+    ${CYAN}snow_clone${NC}                   - Clone ServiceNow incidents to JIRA
+        ${BOLD}Usage:${NC} hcc snow_clone [INC1234567]
+        
+        ${BOLD}Prerequisites:${NC} Configure sapjira_token and snow_key need to be added tO hcc.conf
+            You can take them from the passvault:
+        ${YELLOW}sapjira_token${NC}=https://password.wdf.sap.corp/passvault/index.html#/pwd/0000470384
+        ${YELLOW}snow_key${NC}=https://password.wdf.sap.corp/passvault/index.html#/pwd/0000425681
+
+        ${BOLD}Workflow:${NC}
+        1. Enter ServiceNow Incident ID when prompted
+        2. Script fetches incident data and clones to JIRA
+        3. Customize/edit the HC01 issue as needed
+        ${YELLOW}Note: Description field may need manual editing due to varying HTML content${NC}
+
+${BOLD}${GREEN}⚙️ CONFIGURATION:${NC}
+    ${BOLD}Config file location:${NC} ~/.hcc/hcc.conf
+    (mandatory) user= # User C/I/D number
+    (mandatory) git_access_token= # GitHub Access token, used for Git connections - check ver, updates, etc
+    (mandatory) full_check_results= - # Where Full Check Results are stored into a files /enter full path/
+    (optional) fsids_local= - # Where the automatically generated FSIDs will be stored /enter full path/
+    (optional) sapjira_token= - # Jira Access token, base64 encoded. Mandatory, if you want to make Jira features working
+    (optional) hdbsql_timeout= - # Sets timeout for full_check's SYSTEMDB hdbsql connection
+    (optional) remote_bash_timeout= - # Sets timeout for full_check's commands, ran on OS level. Currently only threads check and hanahealth check
+
+
+    ${BOLD}Required parameters:${NC}
+    ${YELLOW}# LSSH configuration (MANDATORY)${NC}
+    (mandatory) totp=063645 - # one time password generation, keep it unchanged
+    (mandatory) mfa_creds='{ "other": { "totp": "your_totp_key_here" }}' - # JQ format - credentials for generating TOTP.You only have to change <your_totp_key_here>
+
+    
+    ${YELLOW}# ServiceNow integration (optional)${NC}
+        sapjira_token=https://password.wdf.sap.corp/passvault/index.html#/pwd/0000470384
+        snow_key=https://password.wdf.sap.corp/passvault/index.html#/pwd/0000425681
+
+
+${BOLD}${GREEN}📝 PARAMETER REFERENCE:${NC}
+    ${BOLD}<landscape>${NC}    - Target landscape (eu10, us10, ap10, jp10, etc.)
+    ${BOLD}<instance_SID>${NC} - Service Instance ID 
+    ${BOLD}<uuid>${NC}         - Unique identifier for backup operations
+    ${BOLD}<ebid>${NC}         - External backup identifier
+    ${BOLD}<timestamp>${NC}    - Format: "YYYY-MM-DD HH:MM:SS" (use quotes!)
+
+${BOLD}${GREEN}📞 SUPPORT:${NC}
+    For issues, please report here: ${BLUE}$https://github.wdf.sap.corp/TTR/HANACloudConnect/issues${NC}
+
+Available commands (posted by Dev): 
+$(available_commands)
+
+DESC
+)
+
+    # Print with colors
+    printf '%0.s=' {0..80}
+    printf '\n'
+    printf '%b\n' "$usage_text"
+    printf '%0.s=' {0..80}
+    printf '\n'
+    
+    if [[ -n "$error_message" ]]; then
+        printf "${RED}${BOLD}❌ Error! Reason:${NC}\n"
+        printf "${RED}\t$error_message${NC}\n" >&2
+    fi
+}
